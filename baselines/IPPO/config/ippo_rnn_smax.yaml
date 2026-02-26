@@ -30,5 +30,5 @@
 "WANDB_MODE" : "online"
 
 CHECKPOINT_PATH: "SMAX_params_100.npy"
-DAGS_DATASET_PATH: "SMAX_params_100_states.npy"
+DAGS_DATASET_PATH: "SMAX_params_100__2s3z_states.npy"
 P_AUG: 0.0

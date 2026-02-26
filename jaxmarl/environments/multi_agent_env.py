@@ -168,6 +168,13 @@ class MultiAgentEnv(object):
         """
         raise NotImplementedError
 
+def batchify(x: dict, agent_list, num_actors):
+    x = jnp.stack([x[a] for a in agent_list])
+    return x.reshape((num_actors, -1))
+
+def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
+    x = x.reshape((num_actors, num_envs, -1))
+    return {a: x[i] for i, a in enumerate(agent_list)}
 
 class DAGSMultiAgentEnv(MultiAgentEnv):
     """Jittable abstract base class for all JaxMARL Environments."""
@@ -240,6 +247,8 @@ class DAGSMultiAgentEnv(MultiAgentEnv):
                 obs_re = jax.tree.map(
                     lambda x, y: jax.lax.select(augment_reset, x, y), obs_re, new_obs_st
                 )
+
+                
 
         else:
             states_re = reset_state

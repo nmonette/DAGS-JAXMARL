@@ -14,7 +14,7 @@ import distrax
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
-from jaxmarl.wrappers.baselines import SMAXLogWrapper
+from jaxmarl.wrappers.baselines import SMAXLogWrapper, DAGSWrapper
 from jaxmarl.environments.smax import map_name_to_scenario, HeuristicEnemySMAX, SMAX
 
 import wandb
@@ -117,6 +117,7 @@ class TrainState(BaseTrainState):
 def make_train(config, freeze="ally"):
     scenario = map_name_to_scenario(config["MAP_NAME"])
     # env = HeuristicEnemySMAX(scenario=scenario, **config["ENV_KWARGS"])
+    states_dataset = jnp.load(config["DAGS_DATASET_PATH"], allow_pickle=True).item()
     env = SMAX(scenario=scenario, **config["ENV_KWARGS"])
     ally_agents = [f"ally_{i}" for i in range(env.num_agents // 2)]
     enemy_agents = [f"enemy_{i}" for i in range(env.num_agents // 2)]
@@ -137,6 +138,7 @@ def make_train(config, freeze="ally"):
         else config["CLIP_EPS"]
     )
 
+    env = DAGSWrapper(env, states_dataset, states_dataset_size=128 * 128, p_aug=0.0)
     env = SMAXLogWrapper(env)
 
     def linear_schedule(count):
@@ -153,7 +155,7 @@ def make_train(config, freeze="ally"):
         rng, _rng = jax.random.split(rng)
         init_x = (
             jnp.zeros(
-                (1, config["NUM_ENVS"], env.observation_space(env.agents[0]).shape[0])
+                (1, config["NUM_ENVS"], env.observation_space(env.agents[0]).shape[0] + 1)
             ),
             jnp.zeros((1, config["NUM_ENVS"])),
             jnp.zeros((1, config["NUM_ENVS"], env.action_space(env.agents[0]).n)),

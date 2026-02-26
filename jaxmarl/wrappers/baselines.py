@@ -372,10 +372,12 @@ class CTRolloutManager(JaxMARLWrapper):
 
     @partial(jax.jit, static_argnums=0)
     def wrapped_step(self, key, state, actions):
-        obs_, state, reward, done, infos = self._env.step(key, state, actions)
+        obs_, state, reward, done, infos = self._env.step(
+            key, state, actions
+        )
         if self.preprocess_obs:
-            obs = jax.tree.map(self._preprocess_obs, {agent:obs_[agent] for agent in self.agents}, self.agents_one_hot)
-            obs = jax.tree.map(lambda d, o: jnp.where(d, 0., o), {agent:done[agent] for agent in self.agents}, obs) # ensure that the obs are 0s for done agents
+            obs = jax.tree_map(self._preprocess_obs, {agent:obs_[agent] for agent in self.agents}, self.agents_one_hot)
+            obs = jax.tree_map(lambda d, o: jnp.where(d, 0., o), {agent:done[agent] for agent in self.agents}, obs) # ensure that the obs are 0s for done agents
         else:
             obs = obs_
         obs["__all__"] = self.global_state(obs_, state)
@@ -408,3 +410,77 @@ class CTRolloutManager(JaxMARLWrapper):
         # concatenate the extra features
         arr = jnp.concatenate((arr, extra_features), axis=-1)
         return arr
+
+
+@struct.dataclass
+class DAGSWrapperState:
+    env_state: State
+    is_augmented: chex.Array
+
+
+class DAGSWrapper(JaxMARLWrapper):
+    def __init__(self, env, states_dataset: chex.Array, states_dataset_size: int, p_aug: float = 0.0):
+        super().__init__(env)
+        self.env = env
+        self.states_dataset = states_dataset
+        self.states_dataset_size = states_dataset_size
+        self.p_aug = p_aug
+
+    def _append_flag(self, obs: Dict[str, chex.Array], flag: chex.Array) -> Dict[str, chex.Array]:
+        def _append(x: chex.Array) -> chex.Array:
+            f = jnp.asarray(flag, dtype=x.dtype)
+            f = jnp.broadcast_to(f, x.shape[:-1] + (1,))
+            return jnp.concatenate([x, f], axis=-1)
+
+        return {agent: _append(obs[agent]) for agent in self.env.agents}
+
+    @partial(jax.jit, static_argnums=(0,))
+    def reset(self, rng):
+        rng, key_env = jax.random.split(rng)
+        _obs, env_state = self.env.reset(key_env)
+
+        rng, key_aug = jax.random.split(rng)
+        is_augmented = jax.random.bernoulli(key_aug, self.p_aug).astype(jnp.float32)
+
+        rng, key_idx = jax.random.split(rng)
+        idx = jax.random.choice(key_idx, self.states_dataset_size)
+
+        dataset_state = jax.tree_util.tree_map(lambda x: x[idx], self.states_dataset.env_state)
+        env_state = jax.tree_util.tree_map(
+            lambda x, y: jax.lax.select(is_augmented.astype(jnp.bool_), y, x),
+            env_state,
+            dataset_state,
+        )
+
+        obs_agents = self.env.get_obs(env_state)
+        obs_agents = self._append_flag(obs_agents, is_augmented)
+        world_state = jax.lax.stop_gradient(self.env.get_world_state(env_state))
+        obs = {**obs_agents, "world_state": world_state}
+
+        state = DAGSWrapperState(env_state=env_state, is_augmented=is_augmented)
+        return obs, state
+
+    @partial(jax.jit, static_argnums=(0,))
+    def step(self, key, state: DAGSWrapperState, actions):
+        key_step, key_reset = jax.random.split(key)
+
+        obs_st, env_state_st, reward, done, info = self.env.step_env(key_step, state.env_state, actions)
+        obs_agents_st = self._append_flag(obs_st, state.is_augmented)
+        obs_st = {**obs_agents_st, "world_state": obs_st["world_state"]}
+
+        obs_re, state_re = self.reset(key_reset)
+
+        env_state = jax.tree.map(
+            lambda x, y: jax.lax.select(done["__all__"], x, y), state_re.env_state, env_state_st
+        )
+        is_augmented = jax.lax.select(done["__all__"], state_re.is_augmented, state.is_augmented)
+        state = DAGSWrapperState(env_state=env_state, is_augmented=is_augmented)
+
+        obs = jax.tree.map(
+            lambda x, y: jax.lax.select(done["__all__"], x, y), obs_re, obs_st
+        )
+        return obs, state, reward, done, info
+
+    @partial(jax.jit, static_argnums=(0,))
+    def get_avail_actions(self, state: DAGSWrapperState) -> Dict[str, chex.Array]:
+        return self.env.get_avail_actions(state.env_state)

@@ -16,7 +16,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from .ippo_rnn_smax_freeze import make_train as make_train_freeze
 
-from jaxmarl.wrappers.baselines import SMAXLogWrapper
+from jaxmarl.wrappers.baselines import SMAXLogWrapper, DAGSWrapper
 from jaxmarl.environments.smax import map_name_to_scenario, HeuristicEnemySMAX, SMAX
 
 import wandb
@@ -117,7 +117,7 @@ def make_train(config, train_ally_br, train_enemy_br):
     scenario = map_name_to_scenario(config["MAP_NAME"])
     # env = HeuristicEnemySMAX(scenario=scenario, **config["ENV_KWARGS"])
     states_dataset = jnp.load(config["DAGS_DATASET_PATH"], allow_pickle=True).item()
-    env = SMAX(scenario=scenario, states_dataset=states_dataset, p_aug=config["P_AUG"], states_dataset_size=128 * 128, **config["ENV_KWARGS"])
+    env = SMAX(scenario=scenario, **config["ENV_KWARGS"])
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
         config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
@@ -131,6 +131,7 @@ def make_train(config, train_ally_br, train_enemy_br):
         else config["CLIP_EPS"]
     )
 
+    env = DAGSWrapper(env, states_dataset, states_dataset_size=128 * 128, p_aug=config["P_AUG"])
     env = SMAXLogWrapper(env)
 
     def linear_schedule(count):
@@ -147,7 +148,7 @@ def make_train(config, train_ally_br, train_enemy_br):
         rng, _rng = jax.random.split(rng)
         init_x = (
             jnp.zeros(
-                (1, config["NUM_ENVS"], env.observation_space(env.agents[0]).shape[0])
+                (1, config["NUM_ENVS"], env.observation_space(env.agents[0]).shape[0] + 1)
             ),
             jnp.zeros((1, config["NUM_ENVS"])),
             jnp.zeros((1, config["NUM_ENVS"], env.action_space(env.agents[0]).n)),

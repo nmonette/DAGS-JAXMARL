@@ -237,7 +237,8 @@ def main(config):
     states = jax.tree.map(lambda x: x.reshape(config["NUM_ENVS"] * config["NUM_STEPS"], *x.shape[2:]), out)
 
     checkpoint_path = config["CHECKPOINT_PATH"].split(".")[0]
-    jnp.save(f"{checkpoint_path}_states.npy", states, allow_pickle=True)
+    map_name = config["MAP_NAME"]
+    jnp.save(f"{checkpoint_path}__{map_name}_states.npy", states, allow_pickle=True)
 
 
 if __name__ == "__main__":
