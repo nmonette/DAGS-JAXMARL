@@ -167,3 +167,87 @@ class MultiAgentEnv(object):
             agent_names: [agent_base_name_1, agent_base_name_2, ...]
         """
         raise NotImplementedError
+
+
+class DAGSMultiAgentEnv(MultiAgentEnv):
+    """Jittable abstract base class for all JaxMARL Environments."""
+
+    def __init__(
+        self,
+        num_agents: int,
+        states_dataset: chex.Array,
+        states_dataset_size: int,
+        p_aug: float = 0.0,
+    ) -> None:
+        """
+        Args:
+            num_agents (int): maximum number of agents within the environment, used to set array dimensions
+        """
+        self.num_agents = num_agents
+        self.observation_spaces = dict()
+        self.action_spaces = dict()
+
+        self.states_dataset = states_dataset
+        self.states_dataset_size = states_dataset_size
+        self.p_aug = p_aug
+
+    @partial(jax.jit, static_argnums=(0,))
+    def step(
+        self,
+        key: chex.PRNGKey,
+        state: State,
+        actions: Dict[str, chex.Array],
+        reset_state: Optional[State] = None,
+    ) -> Tuple[Dict[str, chex.Array], State, Dict[str, float], Dict[str, bool], Dict]:
+        """Performs step transitions in the environment. Resets the environment if done.
+        To control the reset state, pass `reset_state`. Otherwise, the environment will reset using `self.reset`.
+
+        Args:
+            key (chex.PRNGKey): random key
+            state (State): environment state
+            actions (Dict[str, chex.Array]): agent actions, keyed by agent name
+            reset_state (Optional[State], optional): Optional environment state to reset to on episode completion. Defaults to None.
+
+        Returns:
+            Observations (Dict[str, chex.Array]): next observations
+            State (State): next environment state
+            Rewards (Dict[str, float]): rewards, keyed by agent name
+            Dones (Dict[str, bool]): dones, keyed by agent name:
+            Info (Dict): info dictionary
+        """
+
+        key, key_reset = jax.random.split(key)
+        obs_st, states_st, rewards, dones, infos = self.step_env(key, state, actions)
+
+        if reset_state is None:
+
+            obs_re, states_re = self.reset(key_reset)
+
+            key, _rng, idx_rng = jax.random.split(key, 3)
+            augment_reset = jax.random.bernoulli(_rng, self.p_aug)
+
+            dataset_state_idx = jax.random.choice(idx_rng, self.states_dataset_size)
+            new_states_st = jax.tree_util.tree_map(lambda x: x[dataset_state_idx], self.states_dataset.env_state)
+            new_obs_st = self.get_obs(states_st)
+            new_obs_st["world_state"] = obs_st["world_state"]
+
+            states_re = jax.tree.map(
+                lambda x, y: jax.lax.select(augment_reset, x, y), states_re, new_states_st
+            )
+
+            obs_re = jax.tree.map(
+                lambda x, y: jax.lax.select(augment_reset, x, y), obs_re, new_obs_st
+            )
+
+        else:
+            states_re = reset_state
+            obs_re = self.get_obs(states_re)
+
+        # Auto-reset environment based on termination
+        states = jax.tree.map(
+            lambda x, y: jax.lax.select(dones["__all__"], x, y), states_re, states_st
+        )
+        obs = jax.tree.map(
+            lambda x, y: jax.lax.select(dones["__all__"], x, y), obs_re, obs_st
+        )
+        return obs, states, rewards, dones, infos

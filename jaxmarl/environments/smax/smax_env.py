@@ -2,7 +2,7 @@ import dataclasses
 import jax.numpy as jnp
 import jax
 from jax.experimental import sparse
-from jaxmarl.environments.multi_agent_env import MultiAgentEnv
+from jaxmarl.environments.multi_agent_env import MultiAgentEnv, DAGSMultiAgentEnv
 from jaxmarl.environments.spaces import Box, Discrete
 from jaxmarl.environments.smax.distributions import (
     SurroundAndReflectPositionDistribution,
@@ -143,6 +143,9 @@ class SMAX(MultiAgentEnv):
         smacv2_unit_type_generation=False,
         observation_type="unit_list",
         action_type="discrete",
+        p_aug=0.5,
+        states_dataset_size=128 * 128,
+        states_dataset=None,
     ) -> None:
         self.num_allies = num_allies if scenario is None else scenario.num_allies
         self.num_enemies = num_enemies if scenario is None else scenario.num_enemies
@@ -229,6 +232,10 @@ class SMAX(MultiAgentEnv):
             agent: self._get_individual_action_space(i)
             for i, agent in enumerate(self.agents)
         }
+
+        self.states_dataset = states_dataset
+        self.states_dataset_size = states_dataset_size
+        self.p_aug = p_aug
 
     def _get_individual_action_space(self, i):
         if self.action_type == "discrete":

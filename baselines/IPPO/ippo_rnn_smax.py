@@ -15,7 +15,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 
 from jaxmarl.wrappers.baselines import SMAXLogWrapper
-from jaxmarl.environments.smax import map_name_to_scenario, HeuristicEnemySMAX
+from jaxmarl.environments.smax import map_name_to_scenario, HeuristicEnemySMAX, SMAX
 
 import wandb
 import functools
@@ -112,7 +112,9 @@ def unbatchify(x: jnp.ndarray, agent_list, num_envs, num_actors):
 
 def make_train(config):
     scenario = map_name_to_scenario(config["MAP_NAME"])
-    env = HeuristicEnemySMAX(scenario=scenario, **config["ENV_KWARGS"])
+    # env = HeuristicEnemySMAX(scenario=scenario, **config["ENV_KWARGS"])
+    states_dataset = jnp.load(config["DAGS_DATASET_PATH"], allow_pickle=True).item()
+    env = SMAX(scenario=scenario, states_dataset=states_dataset, p_aug=config["P_AUG"], states_dataset_size=128 * 128, **config["ENV_KWARGS"])
     config["NUM_ACTORS"] = env.num_agents * config["NUM_ENVS"]
     config["NUM_UPDATES"] = (
         config["TOTAL_TIMESTEPS"] // config["NUM_STEPS"] // config["NUM_ENVS"]
@@ -410,7 +412,11 @@ def make_train(config):
             
             rng = update_state[-1]
 
-            def callback(metric):
+            def callback(metric, train_state):
+                
+                # if metric["update_steps"] % 100 == 0:
+                #     jnp.save("SMAX_params_" + str(metric["update_steps"]) + ".npy", train_state.params, allow_pickle=True)
+
                 wandb.log(
                     {
                         # the metrics have an agent dimension, but this is identical
@@ -429,7 +435,7 @@ def make_train(config):
                 )
 
             metric["update_steps"] = update_steps
-            jax.experimental.io_callback(callback, None, metric)
+            jax.experimental.io_callback(callback, None, metric, train_state)
             update_steps = update_steps + 1
             runner_state = (train_state, env_state, last_obs, last_done, hstate, rng)
             return (runner_state, update_steps), metric
