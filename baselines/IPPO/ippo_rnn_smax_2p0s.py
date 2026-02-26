@@ -435,15 +435,15 @@ def make_train(config, train_ally_br, train_enemy_br):
                         * config["NUM_ENVS"]
                         * config["NUM_STEPS"],
                         **metric["loss"],
-                        **({"exploitability": metric["exploitability"]} if metric["update_steps"] % 100 == 0 else {})
+                        **({"exploitability": metric["exploitability"]} if metric["update_steps"] % 20 == 0 else {})
                     }
                 )
 
             rng, _rng, _rng2 = jax.random.split(rng, 3)
             _noop = lambda: 0.0
-            op = lambda: (train_ally_br(_rng, train_state.params) + train_enemy_br(_rng2, train_state.params)) / 2
+            op = lambda: (train_ally_br(_rng, train_state.params, train_state.params) + train_enemy_br(_rng2, train_state.params, train_state.params)) / 2
 
-            metric["exploitability"] = jax.lax.cond(update_steps % 100 == 0, op, _noop)
+            metric["exploitability"] = jax.lax.cond(update_steps % 20 == 0, op, _noop)
         
             metric["update_steps"] = update_steps
             jax.experimental.io_callback(callback, None, metric, train_state)
@@ -479,7 +479,7 @@ def main(config):
         mode=config["WANDB_MODE"],
     )
 
-    alt_config = {**config, "TOTAL_TIMESTEPS": int(5e6)}
+    alt_config = {**config, "TOTAL_TIMESTEPS": int(5e5), "use_self_play_reward": False}
 
     ally_br = jax.jit(make_train_freeze(alt_config, "ally"))
     enemy_br = jax.jit(make_train_freeze(alt_config, "enemy"))

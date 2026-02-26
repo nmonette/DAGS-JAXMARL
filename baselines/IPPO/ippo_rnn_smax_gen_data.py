@@ -238,7 +238,7 @@ def main(config):
 
     checkpoint_path = config["CHECKPOINT_PATH"].split(".")[0]
     map_name = config["MAP_NAME"]
-    jnp.save(f"{checkpoint_path}__{map_name}_states.npy", states, allow_pickle=True)
+    jnp.save(f"{checkpoint_path}_states.npy", states, allow_pickle=True)
 
 
 if __name__ == "__main__":

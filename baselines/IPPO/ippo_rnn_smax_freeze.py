@@ -149,7 +149,7 @@ def make_train(config, freeze="ally"):
         )
         return config["LR"] * frac
 
-    def train(rng, frozen_params=None):
+    def train(rng, frozen_params=None, init_params=None):
         # INIT NETWORK
         network = ActorCriticRNN(env.action_space(env.agents[0]).n, config=config)
         rng, _rng = jax.random.split(rng)
@@ -174,7 +174,7 @@ def make_train(config, freeze="ally"):
             )
         train_state = TrainState.create(
             apply_fn=network.apply,
-            params=network_params,
+            params=network_params if init_params is None else init_params,
             tx=tx,
             frozen_params=jnp.load(config["CHECKPOINT_PATH"], allow_pickle=True).item() if frozen_params is None else frozen_params,
         )

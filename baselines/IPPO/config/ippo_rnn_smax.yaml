@@ -15,7 +15,7 @@
 "MAX_GRAD_NORM": 0.25
 "ACTIVATION": "relu"
 "ENV_NAME": "HeuristicEnemySMAX"
-"MAP_NAME": "2s3z"
+"MAP_NAME": "smacv2_10_units"
 "SEED": 0
 "ENV_KWARGS": 
   "see_enemy_actions": False
@@ -30,5 +30,5 @@
 "WANDB_MODE" : "online"
 
 CHECKPOINT_PATH: "SMAX_params_100.npy"
-DAGS_DATASET_PATH: "SMAX_params_100__2s3z_states.npy"
+DAGS_DATASET_PATH: "SMAX_params_600_smacv2_10_units_states.npy"
 P_AUG: 0.0
