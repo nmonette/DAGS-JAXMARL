@@ -108,7 +108,7 @@ def register_scenario(map_name, scenario):
     MAP_NAME_TO_SCENARIO[map_name] = scenario
 
 
-class SMAX(MultiAgentEnv):
+class SMAX(DAGSMultiAgentEnv):
     def __init__(
         self,
         num_allies=5,

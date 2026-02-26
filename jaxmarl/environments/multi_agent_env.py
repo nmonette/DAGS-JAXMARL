@@ -223,21 +223,23 @@ class DAGSMultiAgentEnv(MultiAgentEnv):
 
             obs_re, states_re = self.reset(key_reset)
 
-            key, _rng, idx_rng = jax.random.split(key, 3)
-            augment_reset = jax.random.bernoulli(_rng, self.p_aug)
+            if self.p_aug > 0 and self.states_dataset is not None:
 
-            dataset_state_idx = jax.random.choice(idx_rng, self.states_dataset_size)
-            new_states_st = jax.tree_util.tree_map(lambda x: x[dataset_state_idx], self.states_dataset.env_state)
-            new_obs_st = self.get_obs(states_st)
-            new_obs_st["world_state"] = obs_st["world_state"]
+                key, _rng, idx_rng = jax.random.split(key, 3)
+                augment_reset = jax.random.bernoulli(_rng, self.p_aug)
 
-            states_re = jax.tree.map(
-                lambda x, y: jax.lax.select(augment_reset, x, y), states_re, new_states_st
-            )
+                dataset_state_idx = jax.random.choice(idx_rng, self.states_dataset_size)
+                new_states_st = jax.tree_util.tree_map(lambda x: x[dataset_state_idx], self.states_dataset.env_state)
+                new_obs_st = self.get_obs(states_st)
+                new_obs_st["world_state"] = obs_st["world_state"]
 
-            obs_re = jax.tree.map(
-                lambda x, y: jax.lax.select(augment_reset, x, y), obs_re, new_obs_st
-            )
+                states_re = jax.tree.map(
+                    lambda x, y: jax.lax.select(augment_reset, x, y), states_re, new_states_st
+                )
+
+                obs_re = jax.tree.map(
+                    lambda x, y: jax.lax.select(augment_reset, x, y), obs_re, new_obs_st
+                )
 
         else:
             states_re = reset_state

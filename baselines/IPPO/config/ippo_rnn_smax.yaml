@@ -21,7 +21,7 @@
   "see_enemy_actions": False
   "walls_cause_death": True
   # "attack_mode": "closest"
-  "use_self_play_reward": False
+  "use_self_play_reward": True
 "ANNEAL_LR": True
 
 # WandB Params

@@ -440,7 +440,7 @@ def make_train(config, train_ally_br, train_enemy_br):
 
             rng, _rng, _rng2 = jax.random.split(rng, 3)
             _noop = lambda: 0.0
-            op = lambda: (train_ally_br(_rng, train_state.params) - train_enemy_br(_rng2, train_state.params)) / 2
+            op = lambda: (train_ally_br(_rng, train_state.params) + train_enemy_br(_rng2, train_state.params)) / 2
 
             metric["exploitability"] = jax.lax.cond(update_steps % 100 == 0, op, _noop)
         
